@@ -48,6 +48,7 @@ jobs:
       arch: ${{ inputs.arch }}
       runs-on: ${{ inputs.runs-on }}
       from-artifact: true
+      checkpoint-id: ${{ needs.build-1.outputs.artifact-id }}
 
   build-3:
     needs: build-2
@@ -58,6 +59,7 @@ jobs:
       arch: ${{ inputs.arch }}
       runs-on: ${{ inputs.runs-on }}
       from-artifact: true
+      checkpoint-id: ${{ needs.build-2.outputs.artifact-id }}
 
   build-4:
     needs: build-3
@@ -68,6 +70,7 @@ jobs:
       arch: ${{ inputs.arch }}
       runs-on: ${{ inputs.runs-on }}
       from-artifact: true
+      checkpoint-id: ${{ needs.build-3.outputs.artifact-id }}
 
   build-5:
     needs: build-4
@@ -78,6 +81,7 @@ jobs:
       arch: ${{ inputs.arch }}
       runs-on: ${{ inputs.runs-on }}
       from-artifact: true
+      checkpoint-id: ${{ needs.build-4.outputs.artifact-id }}
 
   build-6:
     needs: build-5
@@ -88,6 +92,7 @@ jobs:
       arch: ${{ inputs.arch }}
       runs-on: ${{ inputs.runs-on }}
       from-artifact: true
+      checkpoint-id: ${{ needs.build-5.outputs.artifact-id }}
 
   build-7:
     needs: build-6
@@ -98,6 +103,7 @@ jobs:
       arch: ${{ inputs.arch }}
       runs-on: ${{ inputs.runs-on }}
       from-artifact: true
+      checkpoint-id: ${{ needs.build-6.outputs.artifact-id }}
 
   build-8:
     needs: build-7
@@ -108,6 +114,7 @@ jobs:
       arch: ${{ inputs.arch }}
       runs-on: ${{ inputs.runs-on }}
       from-artifact: true
+      checkpoint-id: ${{ needs.build-7.outputs.artifact-id }}
 
   build-9:
     needs: build-8
@@ -118,6 +125,7 @@ jobs:
       arch: ${{ inputs.arch }}
       runs-on: ${{ inputs.runs-on }}
       from-artifact: true
+      checkpoint-id: ${{ needs.build-8.outputs.artifact-id }}
 
   build-10:
     needs: build-9
@@ -128,6 +136,7 @@ jobs:
       arch: ${{ inputs.arch }}
       runs-on: ${{ inputs.runs-on }}
       from-artifact: true
+      checkpoint-id: ${{ needs.build-9.outputs.artifact-id }}
 
   build-11:
     needs: build-10
@@ -138,6 +147,7 @@ jobs:
       arch: ${{ inputs.arch }}
       runs-on: ${{ inputs.runs-on }}
       from-artifact: true
+      checkpoint-id: ${{ needs.build-10.outputs.artifact-id }}
 
   build-12:
     needs: build-11
@@ -148,6 +158,7 @@ jobs:
       arch: ${{ inputs.arch }}
       runs-on: ${{ inputs.runs-on }}
       from-artifact: true
+      checkpoint-id: ${{ needs.build-11.outputs.artifact-id }}
 
   build-13:
     needs: build-12
@@ -158,6 +169,7 @@ jobs:
       arch: ${{ inputs.arch }}
       runs-on: ${{ inputs.runs-on }}
       from-artifact: true
+      checkpoint-id: ${{ needs.build-12.outputs.artifact-id }}
 
   build-14:
     needs: build-13
@@ -168,6 +180,7 @@ jobs:
       arch: ${{ inputs.arch }}
       runs-on: ${{ inputs.runs-on }}
       from-artifact: true
+      checkpoint-id: ${{ needs.build-13.outputs.artifact-id }}
 
   build-15:
     needs: build-14
@@ -178,6 +191,7 @@ jobs:
       arch: ${{ inputs.arch }}
       runs-on: ${{ inputs.runs-on }}
       from-artifact: true
+      checkpoint-id: ${{ needs.build-14.outputs.artifact-id }}
 
   package:
     needs: [build-1, build-2, build-3, build-4, build-5, build-6, build-7, build-8, build-9, build-10, build-11, build-12, build-13, build-14, build-15]
@@ -192,6 +206,21 @@ jobs:
         id: package
         with:
           arch: ${{ inputs.arch }}
+          checkpoint_id: ${{ needs.build-15.outputs.artifact-id
+                             || needs.build-14.outputs.artifact-id
+                             || needs.build-13.outputs.artifact-id
+                             || needs.build-12.outputs.artifact-id
+                             || needs.build-11.outputs.artifact-id
+                             || needs.build-10.outputs.artifact-id
+                             || needs.build-9.outputs.artifact-id
+                             || needs.build-8.outputs.artifact-id
+                             || needs.build-7.outputs.artifact-id
+                             || needs.build-6.outputs.artifact-id
+                             || needs.build-5.outputs.artifact-id
+                             || needs.build-4.outputs.artifact-id
+                             || needs.build-3.outputs.artifact-id
+                             || needs.build-2.outputs.artifact-id
+                             || needs.build-1.outputs.artifact-id }}
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
           azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}

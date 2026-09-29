@@ -11,6 +11,10 @@ on:
       from-artifact:
         required: true
         type: boolean
+      checkpoint-id:
+        required: false
+        type: string
+        default: ""
     secrets:
       AZURE_TENANT_ID:
         required: true
@@ -27,6 +31,8 @@ on:
     outputs:
       finished:
         value: ${{ jobs.build.outputs.finished }}
+      artifact-id:
+        value: ${{ jobs.build.outputs.artifact-id }}
       version:
         value: ${{ jobs.build.outputs.version }}
 permissions:
@@ -40,6 +46,7 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      artifact-id: ${{ steps.stage.outputs.artifact_id }}
       version: ${{ steps.package.outputs.version }}
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +58,7 @@ jobs:
         with:
           arm: ${{ inputs.arch == 'arm64' }}
           from_artifact: ${{ inputs.from-artifact }}
+          checkpoint_id: ${{ inputs.checkpoint-id }}
           package_here: true
       - uses: ./.github/actions/package
         id: package

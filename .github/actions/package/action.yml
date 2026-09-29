@@ -4,6 +4,9 @@ inputs:
   from_artifact:
     description: Restore the build tree from a previous job
     default: true
+  checkpoint_id:
+    description: Exact build artifact ID to restore when from_artifact is true
+    required: false
   arch:
     description: Target architecture (x86_64 or arm64)
     required: true
@@ -38,6 +41,7 @@ runs:
       with:
         arm: ${{ inputs.arch == 'arm64' }}
         from_artifact: ${{ inputs.from_artifact }}
+        checkpoint_id: ${{ inputs.checkpoint_id }}
         save_artifact: false
 
     - name: Check build completed

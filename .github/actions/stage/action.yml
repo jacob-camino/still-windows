@@ -4,6 +4,9 @@ inputs:
   from_artifact:
     description: If a previous stage already uploaded build artifacts, the stage will resume building
     required: true
+  checkpoint_id:
+    description: Exact artifact ID returned by the previous build stage
+    required: false
   package_here:
     description: Package on this runner if compilation finishes with time to spare
     default: false

@@ -28,9 +28,16 @@ Additional stages and setup time add cost. Paid compute requires approval.
 The inherited release workflow additionally requires Azure signing credentials.
 For initial test artifacts on a suitable machine, the documented `build.py`
 and unsigned `package.py` path can be used. Do not remove signature verification
-or supply false signing settings to make the release workflow run. Its Windows
-checkpoint helper also needs review before reuse: it currently ignores 7-Zip
-failure and does not throw after exhausting upload retries.
+or supply false signing settings to make the release workflow run. The Windows
+checkpoint helper now rejects failed archive creation/integrity checks and
+exhausted upload retries. Each stage passes the exact checkpoint ID to its
+successor, and only deletes its predecessor after the new upload succeeds.
+Eleven isolated action tests exercise those failures, exact-ID restore,
+successful retry, cleanup failure, dependency setup, and Still package names.
+A failed best-effort cleanup leaves the prior checkpoint until its existing
+four-day retention expires. Artifact storage costs require a separate review
+before dispatch, even when runner compute is free.
+This is not a native Windows test or a completed checkpoint transfer.
 
 - [GitHub standard runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
 - [Larger runner sizes and availability](https://docs.github.com/en/actions/reference/runners/larger-runners)

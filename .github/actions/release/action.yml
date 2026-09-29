@@ -45,4 +45,4 @@ runs:
         name: ${{ inputs.version }}
         tag_name: ${{ inputs.version }}
         files: |
-          release-artifacts/helium*
+          release-artifacts/still_*

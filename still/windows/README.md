@@ -1,9 +1,14 @@
 # Still Windows integration
 
-This personal fork adds the shared Still UI, a separate Windows product identity,
-and the same signed local blocking extension as the Mac build. No Windows binary,
+This personal fork adds one vertically centered left island with Helium's actual
+address toolbar, tab groups, and large tabs. The Ink island stays hidden until
+hover or keyboard interaction and overlays a stable page viewport without
+shifting it. Native OS caption controls remain available. Pages are grayscale,
+with a hover/focus color toggle. Windows product identities are separate, and
+the signed local blocking extension matches the Mac build. No Windows binary,
 installer, Authenticode signature, or working update feed has been produced or
-tested yet. No CI workflow or paid build host has been started.
+tested yet. Capacity-only CI probes have run; no native build or paid build host
+has been started.
 
 The pinned base is Helium Chromium `b38c4bdd2ecbe5c680dc3c5d464a2edc84d49d4c`,
 Chromium `154.0.8037.57`. `build.py` runs `still/apply.py` after upstream patches,
@@ -47,6 +52,8 @@ prepared or validated.
 ```powershell
 python build.py -j 8
 python still/windows/test-integration.py --source build/src
+python -m unittest discover -s still/tests -v
+node --test still/windows/test-stage.mjs
 python package.py --output-dir build
 ```
 
@@ -84,11 +91,17 @@ claimed to work. Component/service update behavior remains upstream's.
 
 ## Checks performed on macOS
 
-The four Still patches pass checks and application against a fixture generated
-from the exact Chromium revision and ordered matching Helium core/Windows
-patches, including name substitution. Five integration tests cover matching
+The six Still patches pass checks and application against a fixture generated
+from the exact Chromium revision and 90 ordered matching Helium core/Windows
+patches, including name substitution. The shared patch files and blocker assets
+match the Mac fork byte-for-byte; Mac-only patch007 is excluded. Five integration tests cover matching
 native/NSIS/IDL identities, real portable ZIP and installer staging of the exact
 CRX bytes, missing/stale build output and tampered-package rejection, and patch application plus repeated
-validation from inside an outer Git repository. The copied blocker's core tests
-and Python syntax checks also pass. These are source/packaging checks, not a
+validation from inside an outer Git repository. Seven shared patch-helper tests
+cover overlapping changes, prefix upgrades, and validation without source writes.
+The actual 42-file series also upgrades every prefix from zero through six
+patches and revalidates to identical final bytes. Eleven isolated action tests verify checkpoint failures, exact-ID handoff,
+predecessor preservation, retry/cleanup behavior, and package selection. Run
+`node --test still/windows/test-stage.mjs` for those isolated action checks.
+The copied blocker's core tests and Python syntax checks also pass. These are source/packaging checks, not a
 Windows compile, installation test, or release artifact.
