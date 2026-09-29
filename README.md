@@ -1,6 +1,14 @@
-# helium-windows
+# Still for Windows
 
-Windows packaging for [Helium](https://github.com/imputnet/helium).
+Personal Still fork of the Windows packaging for
+[Helium](https://github.com/imputnet/helium), with the shared Still grayscale,
+dark Ink Margin layout and signed local blocking extension.
+
+The source integration is prepared and fixture-tested. **There is no built or
+signed Windows Still executable yet.** See [Still's Windows build status and
+identity](still/windows/README.md) before building or packaging. The upstream
+build instructions and credits follow; no sponsored or paid runners have been
+started for this fork.
 
 ## Credits
 
@@ -164,4 +172,3 @@ ln -s /usr/bin/vim /usr/bin/vi
 1. Download nightly rust build from: `https://static.rust-lang.org/dist/<build-date>/rust-nightly-aarch64-pc-windows-msvc.tar.gz`
 	1. Replace `build-date` with the obtained value
 	1. Get the SHA-512 checksum using `sha512sum` in **`MSYS2 MSYS`**.
-

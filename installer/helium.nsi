@@ -2,7 +2,7 @@
 ; You can use, redistribute, and/or modify this source code under
 ; the terms of the GPL-3.0 license that can be found in the LICENSE file.
 ;
-; NSIS installer script for Helium browser.
+; NSIS installer script for Still browser.
 ; Wraps setup.exe + helium.7z with a GUI.
 ;
 ; Required defines (passed via makensis -D):
@@ -22,10 +22,10 @@
 !include "FileFunc.nsh"
 
 ; --- Product Information ---
-!define PRODUCT_NAME "Helium"
-!define PRODUCT_PUBLISHER "imput"
-!define PRODUCT_COMPANY_PATH "imput"
-!define PRODUCT_GUID "{FB68A146-637A-48C2-A0C4-1565DE45FEBD}"
+!define PRODUCT_NAME "Still"
+!define PRODUCT_PUBLISHER "Jacob Camino"
+!define PRODUCT_COMPANY_PATH "JacobCamino"
+!define PRODUCT_GUID "{5ACE1F37-870C-54DA-8C34-2E1D10263F9D}"
 
 ; --- Installer Configuration ---
 Name "${PRODUCT_NAME} ${VERSION}"
@@ -69,7 +69,7 @@ Page custom InstallTypePage InstallTypePageLeave
 !define MUI_FINISHPAGE_TEXT "${PRODUCT_NAME} has been successfully installed on your computer.$\r$\n$\r$\nClick Finish to close Setup."
 !define MUI_FINISHPAGE_RUN
 !define MUI_FINISHPAGE_RUN_TEXT "Launch ${PRODUCT_NAME}"
-!define MUI_FINISHPAGE_RUN_FUNCTION LaunchHelium
+!define MUI_FINISHPAGE_RUN_FUNCTION LaunchStill
 !insertmacro MUI_PAGE_FINISH
 
 ; --- Language ---
@@ -200,13 +200,13 @@ Section "Install" SecInstall
   StrCpy $InstallFailed ""
 
   ; Extract setup files to temp directory
-  SetOutPath "$TEMP\helium_install"
+  SetOutPath "$TEMP\still_install"
   DetailPrint "Extracting installation files..."
   File "${SETUP_EXE}"
   File /oname=helium.7z "${HELIUM_7Z}"
 
   ; Build setup.exe command line
-  StrCpy $0 '"$TEMP\helium_install\setup.exe" --install-archive="$TEMP\helium_install\helium.7z" --do-not-launch-chrome'
+  StrCpy $0 '"$TEMP\still_install\setup.exe" --install-archive="$TEMP\still_install\helium.7z" --do-not-launch-chrome'
 
   ${If} $InstallType == "system"
     StrCpy $0 '$0 --system-level'
@@ -311,9 +311,9 @@ Section "Install" SecInstall
 
   ; Clean up extracted files
   DetailPrint "Cleaning up..."
-  Delete "$TEMP\helium_install\setup.exe"
-  Delete "$TEMP\helium_install\helium.7z"
-  RMDir "$TEMP\helium_install"
+  Delete "$TEMP\still_install\setup.exe"
+  Delete "$TEMP\still_install\helium.7z"
+  RMDir "$TEMP\still_install"
 
   ; Abort if installation failed (prevents finish page from showing success)
   ${If} $InstallFailed == "1"
@@ -325,7 +325,7 @@ SectionEnd
 ; Finish Page - Launch Function
 ; =============================================================================
 
-Function LaunchHelium
+Function LaunchStill
   ${If} $InstallType == "system"
     Exec '"$PROGRAMFILES64\${PRODUCT_COMPANY_PATH}\${PRODUCT_NAME}\Application\chrome.exe"'
   ${Else}

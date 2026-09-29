@@ -19,6 +19,7 @@ if sys.version_info.major < 3:
 import argparse
 import hashlib
 import importlib.util
+import json
 import platform
 import re
 from pathlib import Path
@@ -48,7 +49,20 @@ def get_target_cpu(build_outputs):
     return match[1]
 
 
+def verify_blocking_bundle(resource_directory):
+    """Reject missing/stale blocker bytes instead of silently skipping a glob."""
+    subprocess.run([sys.executable, str(_ROOT_DIR / 'still/blocking/copy-into-source.py'),
+                    '--source', str(_BUILD_SRC), '--check-only'], check=True)
+    metadata = json.loads((_ROOT_DIR / 'still/blocking/package/metadata.json').read_text())
+    artifact = resource_directory / 'still-blocking.crx'
+    if not artifact.is_file():
+        raise FileNotFoundError(f'Missing Still blocker build output: {artifact}')
+    if artifact.stat().st_size != metadata['bytes'] or digest(artifact) != metadata['sha256']:
+        raise ValueError(f'Still blocker differs from the reviewed package: {artifact}')
+
+
 def portable_files(build_outputs, cpu_arch='64bit'):
+    verify_blocking_bundle(build_outputs / 'resources')
     return filescfg.filescfg_generator(
         _BUILD_SRC / 'chrome/tools/build/win/FILES.cfg',
         build_outputs, cpu_arch, _PORTABLE_EXCLUSIONS)
@@ -74,6 +88,7 @@ def create_packages(build_outputs, output_dir, cpu_arch='64bit', *, installer_in
     build_outputs = build_outputs.resolve()
     installer_inputs = (installer_inputs or build_outputs).resolve()
     output_dir = output_dir.resolve()
+    verify_blocking_bundle(build_outputs / 'resources')
     output_dir.mkdir(parents=True, exist_ok=True)
 
     version_parts = helium_version.get_version_parts(_ROOT_DIR / 'helium-chromium', _ROOT_DIR)
@@ -82,10 +97,10 @@ def create_packages(build_outputs, output_dir, cpu_arch='64bit', *, installer_in
 
     target_cpu = get_target_cpu(installer_inputs)
 
-    installer_output = output_dir / f'helium_{version}_{target_cpu}-installer.exe'
+    installer_output = output_dir / f'still_{version}_{target_cpu}-installer.exe'
     _build_nsis_installer(version, target_cpu, installer_inputs, installer_output)
 
-    mini_installer_output = output_dir / f'helium_{version}_{target_cpu}-mini-installer.exe'
+    mini_installer_output = output_dir / f'still_{version}_{target_cpu}-mini-installer.exe'
     shutil.copy2(installer_inputs / 'mini_installer.exe', mini_installer_output)
 
     timestamp = None
@@ -95,7 +110,7 @@ def create_packages(build_outputs, output_dir, cpu_arch='64bit', *, installer_in
     except FileNotFoundError:
         pass
 
-    output = output_dir / f'helium_{version}_{target_cpu}-windows.zip'
+    output = output_dir / f'still_{version}_{target_cpu}-windows.zip'
 
     filescfg.create_archive(
         portable_files(build_outputs, cpu_arch), tuple(), build_outputs, output, timestamp)
@@ -146,6 +161,7 @@ def stage_build(build_outputs, seven_zip, arch=None):
     shutil.copy2(build_outputs / 'mini_installer.exe', work / 'unsigned-mini-installer.exe')
     extract(seven_zip, build_outputs / 'helium.7z', work / 'payload')
     version = load_chromium_tool('create_installer_archive').BuildVersion()
+    verify_blocking_bundle(work / 'payload/Helium-bin' / version / 'resources')
     for required in (portable / 'chrome.exe', portable / 'chrome.dll',
                      work / 'payload/Helium-bin/chrome.exe',
                      work / 'payload/Helium-bin' / version / 'chrome.dll'):

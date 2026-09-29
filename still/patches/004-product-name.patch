@@ -1,0 +1,31 @@
+Still: use the product name in native app-name resource messages.
+
+Only the four non-translatable product identity messages change. Keep upstream
+copyright attribution, service names, translated prose and security text.
+
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -282,18 +282,18 @@
+       <if expr="_is_chrome_for_testing_branded">
+         <then>
+           <message name="IDS_PRODUCT_NAME" desc="The Chrome for Testing application name" translateable="false">
+-            Helium for Testing
++            Still for Testing
+           </message>
+           <message name="IDS_SHORT_PRODUCT_NAME" desc="The Chrome for Testing application short name." translateable="false">
+-            Helium for Testing
++            Still for Testing
+           </message>
+         </then>
+         <else>
+           <message name="IDS_PRODUCT_NAME" desc="The Chrome application name" translateable="false">
+-            Helium
++            Still
+           </message>
+           <message name="IDS_SHORT_PRODUCT_NAME" desc="The Chrome application short name." translateable="false">
+-            Helium
++            Still
+           </message>
+         </else>
+       </if>

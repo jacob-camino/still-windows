@@ -1,0 +1,563 @@
+Still: default to the Ink Margin layout and grayscale tab contents.
+
+Keep Helium's existing vertical/Zen controls, observe a profile preference on
+browser-owned WebContents layers, and expose page color through a hover/focus
+footer toggle. No changes to renderer security, compositing, or overlay code.
+The toggle is currently exposed in Vertical layout only; the saved preference
+continues to apply when using another layout.
+
+diff --git a/chrome/app/generated_resources.grd b/chrome/app/generated_resources.grd
+index f8c2d6d..3843918 100644
+--- a/chrome/app/generated_resources.grd
++++ b/chrome/app/generated_resources.grd
+@@ -11235,6 +11235,15 @@ Keep your key file in a safe place. You will need it to create new versions of y
+       <message name="IDS_ACCNAME_EXTENSIONS" desc="The accessible name for the Extensions toolbar.">
+         Extensions
+       </message>
++      <message name="IDS_STILL_PAGE_COLOR" desc="Accessible name of the toggle that enables color for browser tab contents.">
++        Page color
++      </message>
++      <message name="IDS_STILL_SHOW_PAGE_COLOR" desc="Tooltip for enabling color in browser tab contents.">
++        Show page color
++      </message>
++      <message name="IDS_STILL_USE_GRAYSCALE" desc="Tooltip for displaying browser tab contents in grayscale.">
++        Use grayscale
++      </message>
+       <message name="IDS_ACCNAME_NEWTAB" desc="The accessible name for the New Tab (+) button.">
+         New Tab
+       </message>
+diff --git a/chrome/app/vector_icons/BUILD.gn b/chrome/app/vector_icons/BUILD.gn
+index c964d9c..609ba8a 100644
+--- a/chrome/app/vector_icons/BUILD.gn
++++ b/chrome/app/vector_icons/BUILD.gn
+@@ -313,6 +313,7 @@ aggregate_vector_icons("chrome_vector_icons") {
+     "split_scene_up.icon",
+     "split_scene_up_old.icon",
+     "star.icon",
++    "still_color.icon",
+     "stop_circle.icon",
+     "submit_feedback_old.icon",
+     "supervised_user_circle_filled.icon",
+diff --git a/chrome/app/vector_icons/still_color.icon b/chrome/app/vector_icons/still_color.icon
+new file mode 100644
+index 0000000..3741c82
+--- /dev/null
++++ b/chrome/app/vector_icons/still_color.icon
+@@ -0,0 +1,12 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++CANVAS_DIMENSIONS, 20,
++MOVE_TO, 10, 3,
++ARC_TO, 7, 7, 0, 1, 0, 10, 17,
++ARC_TO, 7, 7, 0, 1, 0, 10, 3,
++CLOSE,
++MOVE_TO, 10, 4.5f,
++ARC_TO, 5.5f, 5.5f, 0, 0, 1, 10, 15.5f,
++CLOSE
+diff --git a/chrome/browser/themes/theme_service.cc b/chrome/browser/themes/theme_service.cc
+index 0f21fab..4a1a159 100644
+--- a/chrome/browser/themes/theme_service.cc
++++ b/chrome/browser/themes/theme_service.cc
+@@ -316,7 +316,7 @@ void ThemeService::RegisterProfilePrefs(
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+   registry->RegisterIntegerPref(
+       prefs::kBrowserColorScheme,
+-      std::to_underlying(ThemeService::BrowserColorScheme::kSystem));
++      std::to_underlying(ThemeService::BrowserColorScheme::kDark));
+   registry->RegisterIntegerPref(
+       prefs::kDeprecatedUserColorDoNotUse, SK_ColorTRANSPARENT,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+@@ -331,7 +331,7 @@ void ThemeService::RegisterProfilePrefs(
+   registry->RegisterBooleanPref(
+       prefs::kDeprecatedGrayscaleThemeEnabledDoNotUse, false,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+-  registry->RegisterBooleanPref(prefs::kGrayscaleThemeEnabled, false);
++  registry->RegisterBooleanPref(prefs::kGrayscaleThemeEnabled, true);
+   registry->RegisterBooleanPref(prefs::kBrowserFollowsSystemThemeColors,
+                                 BUILDFLAG(IS_CHROMEOS));
+   registry->RegisterBooleanPref(prefs::kSyncingThemePrefsMigratedToNonSyncing,
+diff --git a/chrome/browser/ui/browser_ui_prefs.cc b/chrome/browser/ui/browser_ui_prefs.cc
+index 3c89b46..0522a6a 100644
+--- a/chrome/browser/ui/browser_ui_prefs.cc
++++ b/chrome/browser/ui/browser_ui_prefs.cc
+@@ -135,6 +135,8 @@ void RegisterBrowserUserPrefs(user_prefs::PrefRegistrySyncable* registry) {
+ 
+   registry->RegisterBooleanPref(prefs::kHeliumRoundedFrame, true);
+ 
++  registry->RegisterBooleanPref(prefs::kStillGrayscaleEnabled, true);
++
+   registry->RegisterBooleanPref(prefs::kHeliumNativeFrameMaterials, false);
+ 
+   registry->RegisterBooleanPref(prefs::kHeliumCenteredLocationBar, false);
+diff --git a/chrome/browser/ui/browser_window/internal/browser_window_features.cc b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
+index d8da1ae..8710b4d 100644
+--- a/chrome/browser/ui/browser_window/internal/browser_window_features.cc
++++ b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
+@@ -642,8 +642,7 @@ void BrowserWindowFeatures::Init(BrowserWindowInterface* browser) {
+             ->get_vertical_tabs_initial_uncollapsed_width();
+ 
+     if (!restored_state_collapsed.has_value() &&
+-        !restored_state_uncollapsed_width.has_value() &&
+-        !browser->CreatedBySessionRestore()) {
++        !restored_state_uncollapsed_width.has_value()) {
+       restored_state_collapsed =
+           profile->GetPrefs()->GetBoolean(prefs::kVerticalTabsCollapsedState);
+       restored_state_uncollapsed_width =
+diff --git a/chrome/browser/ui/layout_constants.cc b/chrome/browser/ui/layout_constants.cc
+index 928ba6f..5401899 100644
+--- a/chrome/browser/ui/layout_constants.cc
++++ b/chrome/browser/ui/layout_constants.cc
+@@ -151,11 +151,11 @@ int GetLayoutConstant(LayoutConstant constant) {
+     case LayoutConstant::kVerticalTabCornerRadius:
+       return 8;
+     case LayoutConstant::kVerticalTabHeight:
+-      return 30;
++      return 44;
+     case LayoutConstant::kVerticalTabPinnedHeight:
+-      return 30;
++      return 44;
+     case LayoutConstant::kVerticalTabMinWidth:
+-      return 30;
++      return 44;
+     case LayoutConstant::kVerticalTabStripHorizontalPadding:
+       return 6;
+     case LayoutConstant::kVerticalTabStripUncollapsedVerticalPadding:
+diff --git a/chrome/browser/ui/tabs/tab_strip_prefs.cc b/chrome/browser/ui/tabs/tab_strip_prefs.cc
+index 47f4f37..e12f6d7 100644
+--- a/chrome/browser/ui/tabs/tab_strip_prefs.cc
++++ b/chrome/browser/ui/tabs/tab_strip_prefs.cc
+@@ -25,15 +25,15 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterBooleanPref(prefs::kOrganizerPanelPinnedToTabstrip, true);
+   registry->RegisterBooleanPref(prefs::kEverythingMenuPinnedToTabstrip, true);
+   registry->RegisterBooleanPref(prefs::kTabScrollButtonsPinnedToTabstrip, true);
+-  registry->RegisterBooleanPref(prefs::kVerticalTabsCollapsedState, false);
++  registry->RegisterBooleanPref(prefs::kVerticalTabsCollapsedState, true);
+   registry->RegisterIntegerPref(prefs::kVerticalTabsUncollapsedWidth,
+                                 kVerticalTabStripDefaultUncollapsedWidth);
+ 
+-  registry->RegisterIntegerPref(prefs::kHeliumLayout,
+-                                std::to_underlying(HeliumLayoutType::kClassic));
++  registry->RegisterIntegerPref(
++      prefs::kHeliumLayout, std::to_underlying(HeliumLayoutType::kVertical));
+   registry->RegisterBooleanPref(prefs::kHeliumVerticalRightAligned, false);
+-  registry->RegisterBooleanPref(prefs::kHeliumZenMode, false);
+-  registry->RegisterBooleanPref(prefs::kHeliumZenModeSidebarPinned, false);
++  registry->RegisterBooleanPref(prefs::kHeliumZenMode, true);
++  registry->RegisterBooleanPref(prefs::kHeliumZenModeSidebarPinned, true);
+   registry->RegisterBooleanPref(prefs::kHeliumZenModeTopChromePinned, false);
+ }
+ 
+diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/frame/BUILD.gn
+index 048f74a..639a746 100644
+--- a/chrome/browser/ui/views/frame/BUILD.gn
++++ b/chrome/browser/ui/views/frame/BUILD.gn
+@@ -289,6 +289,7 @@ source_set("contents_web_view") {
+     "//build:buildflag_header_h",
+     "//chrome/browser/ui:ui_features",
+     "//chrome/common:buildflags",
++    "//components/prefs",
+     "//ui/base/interaction",
+     "//ui/base/metadata",
+     "//ui/gfx/geometry",
+@@ -297,8 +298,10 @@ source_set("contents_web_view") {
+   ]
+   deps = [
+     ":web_contents_close_handler",
++    "//chrome/browser/profiles:profile",
+     "//chrome/browser/ui/color:color_headers",
+     "//chrome/browser/ui/views:status_bubble",
++    "//chrome/common:constants",
+     "//components/tabs:public",
+     "//components/web_modal",
+     "//content/public/browser",
+diff --git a/chrome/browser/ui/views/frame/contents_web_view.cc b/chrome/browser/ui/views/frame/contents_web_view.cc
+index 9c8c2f8..ce9fd50 100644
+--- a/chrome/browser/ui/views/frame/contents_web_view.cc
++++ b/chrome/browser/ui/views/frame/contents_web_view.cc
+@@ -5,10 +5,14 @@
+ #include "chrome/browser/ui/views/frame/contents_web_view.h"
+ 
+ #include "base/debug/dump_without_crashing.h"
++#include "base/functional/bind.h"
+ #include "build/build_config.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/views/frame/web_contents_close_handler.h"
+ #include "chrome/browser/ui/views/status_bubble_views.h"
++#include "chrome/common/pref_names.h"
++#include "components/prefs/pref_service.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "components/web_modal/web_contents_modal_dialog_manager.h"
+ #include "content/public/browser/render_widget_host_view.h"
+@@ -38,6 +42,13 @@ ContentsWebView::ContentsWebView(content::BrowserContext* browser_context)
+   status_bubble_ = std::make_unique<StatusBubbleViews>(this);
+   status_bubble_->Reposition();
+   web_contents_close_handler_ = std::make_unique<WebContentsCloseHandler>(this);
++  grayscale_pref_registrar_.Init(
++      Profile::FromBrowserContext(browser_context)->GetPrefs());
++  grayscale_pref_registrar_.Add(
++      prefs::kStillGrayscaleEnabled,
++      base::BindRepeating(&ContentsWebView::UpdateGrayscale,
++                          base::Unretained(this)));
++  UpdateGrayscale();
+ }
+ 
+ ContentsWebView::~ContentsWebView() = default;
+@@ -185,6 +196,13 @@ void ContentsWebView::DidGetUserInteraction(const blink::WebInputEvent& event) {
+ }
+ #endif
+ 
++void ContentsWebView::UpdateGrayscale() {
++  // The embedded WebContents layers inherit this browser-owned filter.
++  const bool enabled = grayscale_pref_registrar_.prefs()->GetBoolean(
++      prefs::kStillGrayscaleEnabled);
++  layer()->SetLayerGrayscale(enabled ? 1.0f : 0.0f);
++}
++
+ void ContentsWebView::UpdateBackgroundColor() {
+   const SkColor color = GetColorProvider()->GetColor(
+       is_letterboxing() ? kColorWebContentsBackgroundLetterboxing
+diff --git a/chrome/browser/ui/views/frame/contents_web_view.h b/chrome/browser/ui/views/frame/contents_web_view.h
+index dba4f32..cd96cba 100644
+--- a/chrome/browser/ui/views/frame/contents_web_view.h
++++ b/chrome/browser/ui/views/frame/contents_web_view.h
+@@ -11,6 +11,7 @@
+ #include "build/build_config.h"
+ #include "chrome/browser/ui/views/frame/web_contents_close_handler_delegate.h"
+ #include "chrome/common/buildflags.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "ui/base/interaction/element_identifier.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/gfx/geometry/rounded_corners_f.h"
+@@ -81,6 +82,8 @@ class ContentsWebView : public views::WebView,
+ 
+  private:
+   void UpdateBackgroundColor();
++  void UpdateGrayscale();
++  PrefChangeRegistrar grayscale_pref_registrar_;
+   std::unique_ptr<StatusBubbleViews> status_bubble_;
+   std::unique_ptr<WebContentsCloseHandler> web_contents_close_handler_;
+ 
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+index 791bf31..50b62d5 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -110,6 +110,7 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+   SetPaintToLayer();
+   // Because corners may be transparent, this must be set to false.
+   layer()->SetFillsBoundsOpaquely(false);
++  layer()->SetLayerGrayscale(1.0f);
+ 
+   const int region_horizontal_padding =
+       GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);
+@@ -444,6 +445,7 @@ bool VerticalTabStripRegionView::OnKeyPressed(const ui::KeyEvent& event) {
+ }
+ 
+ void VerticalTabStripRegionView::OnMouseEntered(const ui::MouseEvent& event) {
++  bottom_button_container_->SetRailHovered(true);
+   if (mouse_exit_timer_.IsRunning()) {
+     mouse_exit_timer_.Stop();
+     return;
+@@ -452,6 +454,7 @@ void VerticalTabStripRegionView::OnMouseEntered(const ui::MouseEvent& event) {
+ }
+ 
+ void VerticalTabStripRegionView::OnMouseMoved(const ui::MouseEvent& event) {
++  bottom_button_container_->SetRailHovered(true);
+   if (mouse_exit_timer_.IsRunning()) {
+     mouse_exit_timer_.Stop();
+   }
+@@ -476,6 +479,7 @@ void VerticalTabStripRegionView::HandleMouseExited() {
+     return;
+   }
+ #endif
++  bottom_button_container_->SetRailHovered(false);
+   UpdateExpandOnHoverState(false);
+ }
+ 
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+index b7478d5..2dc74f7 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -65,7 +65,7 @@ class VerticalTabStripRegionView final
+   // TODO(crbug.com/465832180): Replace constant based width final max width for
+   // view.
+   static constexpr int kUncollapsedMaxWidth = 400;
+-  static constexpr int kCollapsedWidth = 42;
++  static constexpr int kCollapsedWidth = 56;
+   // TODO(crbug.com/465833741): Determine snapping behavior.
+   static constexpr int kCollapseSnapWidth =
+       (kUncollapsedMinWidth + kCollapsedWidth) / 2;
+diff --git a/chrome/browser/ui/views/tabs/vertical/BUILD.gn b/chrome/browser/ui/views/tabs/vertical/BUILD.gn
+index 9873585..16fecb9 100644
+--- a/chrome/browser/ui/views/tabs/vertical/BUILD.gn
++++ b/chrome/browser/ui/views/tabs/vertical/BUILD.gn
+@@ -16,7 +16,10 @@ source_set("vertical") {
+     "vertical_tab_strip_top_container.h",
+   ]
+ 
+-  public_deps = [ "//chrome/browser/ui/views/tabs/common" ]
++  public_deps = [
++    "//chrome/browser/ui/views/tabs/common",
++    "//components/prefs",
++  ]
+ 
+   deps = [
+     "//base",
+@@ -47,10 +50,13 @@ source_set("impl") {
+   ]
+ 
+   deps = [
++    "//chrome/app:generated_resources",
++    "//chrome/app/vector_icons",
+     "//chrome/browser:primitives",
+     "//chrome/browser/glic",
+     "//chrome/browser/glic/browser_ui:glow",
+     "//chrome/browser/glic/browser_ui:glow_controller",
++    "//chrome/browser/profiles:profile",
+     "//chrome/browser/themes",
+     "//chrome/browser/ui:browser_element_identifiers",
+     "//chrome/browser/ui:layout_constants",
+@@ -74,8 +80,10 @@ source_set("impl") {
+     "//chrome/browser/ui/views/tabs/shared",
+     "//chrome/browser/ui/views/toolbar",
+     "//chrome/browser/ui/window_metadata",
++    "//chrome/common:constants",
+     "//components/contextual_tasks/public:feature_list",
+     "//components/performance_manager",
++    "//components/prefs",
+     "//components/tab_groups",
+     "//components/tabs:impl",
+     "//content/public/browser",
+diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
+index 01be335..5a96aa1 100644
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
+@@ -5,12 +5,25 @@
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
+ 
+ #include "base/functional/bind.h"
++#include "chrome/app/vector_icons/vector_icons.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_new_tab_button.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
++#include "chrome/common/pref_names.h"
++#include "chrome/grit/generated_resources.h"
++#include "components/prefs/pref_service.h"
++#include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/compositor/layer.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/image_button.h"
+ #include "ui/views/view_class_properties.h"
+ 
+ VerticalTabStripBottomContainer::VerticalTabStripBottomContainer(
+@@ -35,6 +48,39 @@ VerticalTabStripBottomContainer::VerticalTabStripBottomContainer(
+           record_new_tab_button_pressed);
+ 
+   new_tab_button_ = AddChildView(std::move(new_tab_button));
++  color_button_spacer_ = AddChildView(std::make_unique<views::View>());
++  color_button_spacer_->SetProperty(
++      views::kFlexBehaviorKey,
++      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
++                               views::MaximumFlexSizeRule::kUnbounded));
++
++  color_button_ = AddChildView(std::make_unique<views::ToggleImageButton>(
++      base::BindRepeating(&VerticalTabStripBottomContainer::TogglePageColor,
++                          base::Unretained(this))));
++  const int button_size = GetLayoutConstant(LayoutConstant::kVerticalTabHeight);
++  color_button_->SetPreferredSize(gfx::Size(button_size, button_size));
++  color_button_->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
++  color_button_->SetImageHorizontalAlignment(views::ImageButton::ALIGN_CENTER);
++  color_button_->SetImageVerticalAlignment(views::ImageButton::ALIGN_MIDDLE);
++  const auto icon = ui::ImageModel::FromVectorIcon(kStillColorIcon,
++                                                   kColorToolbarButtonIcon, 20);
++  color_button_->SetImageModel(views::Button::STATE_NORMAL, icon);
++  color_button_->SetToggledImageModel(views::Button::STATE_NORMAL, icon);
++  color_button_->SetTooltipText(
++      l10n_util::GetStringUTF16(IDS_STILL_SHOW_PAGE_COLOR));
++  color_button_->SetToggledTooltipText(
++      l10n_util::GetStringUTF16(IDS_STILL_USE_GRAYSCALE));
++  ConfigureInkDrop(color_button_);
++  color_button_->SetPaintToLayer();
++  color_button_->layer()->SetFillsBoundsOpaquely(false);
++  color_button_observation_.Observe(color_button_);
++  grayscale_pref_registrar_.Init(browser_->GetProfile()->GetPrefs());
++  grayscale_pref_registrar_.Add(
++      prefs::kStillGrayscaleEnabled,
++      base::BindRepeating(&VerticalTabStripBottomContainer::UpdateColorButton,
++                          base::Unretained(this)));
++  UpdateColorButton();
++  UpdateColorButtonVisibility();
+ 
+   OnCollapseStateChanged(state_controller->GetCollapseState());
+   collapsed_state_change_subscription_ =
+@@ -49,7 +95,7 @@ VerticalTabStripBottomContainer::~VerticalTabStripBottomContainer() = default;
+ bool VerticalTabStripBottomContainer::IsPositionInWindowCaption(
+     const gfx::Point& point) {
+   for (views::View* child : children()) {
+-    if (!child->GetVisible()) {
++    if (!child->GetVisible() || child == color_button_spacer_) {
+       continue;
+     }
+     gfx::Point point_in_child = point;
+@@ -68,6 +114,39 @@ void VerticalTabStripBottomContainer::OnCollapseStateChanged(
+   UpdateButtonStyles(state != tabs::VerticalTabStripCollapseState::kExpanded);
+ }
+ 
++void VerticalTabStripBottomContainer::SetRailHovered(bool hovered) {
++  rail_hovered_ = hovered;
++  UpdateColorButtonVisibility();
++}
++
++void VerticalTabStripBottomContainer::TogglePageColor() {
++  PrefService* pref_service = grayscale_pref_registrar_.prefs();
++  pref_service->SetBoolean(
++      prefs::kStillGrayscaleEnabled,
++      !pref_service->GetBoolean(prefs::kStillGrayscaleEnabled));
++}
++
++void VerticalTabStripBottomContainer::UpdateColorButton() {
++  color_button_->SetToggled(!grayscale_pref_registrar_.prefs()->GetBoolean(
++      prefs::kStillGrayscaleEnabled));
++  color_button_->GetViewAccessibility().SetName(
++      l10n_util::GetStringUTF16(IDS_STILL_PAGE_COLOR));
++}
++
++void VerticalTabStripBottomContainer::UpdateColorButtonVisibility() {
++  // Reserve the target and its focus order while hiding only its paint.
++  color_button_->layer()->SetOpacity(
++      rail_hovered_ || color_button_->HasFocus() ? 1.0f : 0.0f);
++}
++
++void VerticalTabStripBottomContainer::OnViewFocused(views::View*) {
++  UpdateColorButtonVisibility();
++}
++
++void VerticalTabStripBottomContainer::OnViewBlurred(views::View*) {
++  UpdateColorButtonVisibility();
++}
++
+ void VerticalTabStripBottomContainer::OnNewTabButtonContextMenuWillShow() {
+   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
+   CHECK(browser_view);
+@@ -84,6 +163,12 @@ void VerticalTabStripBottomContainer::UpdateButtonStyles(bool collapsed) {
+   auto orientation = collapsed ? views::LayoutOrientation::kVertical
+                                : views::LayoutOrientation::kHorizontal;
+ 
++  color_button_spacer_->SetVisible(collapsed);
++  new_tab_button_->SetShouldShowLabel(!collapsed);
++  new_tab_button_->SetHorizontalAlignment(
++      collapsed ? gfx::HorizontalAlignment::ALIGN_CENTER
++                : gfx::HorizontalAlignment::ALIGN_LEFT);
++
+   // Setting button's layout based on collapsed state
+   SetOrientation(orientation);
+   SetCrossAxisAlignment(collapsed ? views::LayoutAlignment::kStretch
+diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
+index fe76a1b..52727d5 100644
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
+@@ -7,8 +7,11 @@
+ 
+ #include "base/callback_list.h"
+ #include "base/memory/raw_ptr.h"
++#include "base/scoped_observation.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/views/layout/flex_layout_view.h"
++#include "ui/views/view_observer.h"
+ 
+ class BrowserWindowInterface;
+ class ExpandOnHoverLock;
+@@ -23,8 +26,13 @@ class VerticalTabStripStateController;
+ enum class VerticalTabStripCollapseState;
+ }  // namespace tabs
+ 
++namespace views {
++class ToggleImageButton;
++}  // namespace views
++
+ // Bottom container of the vertical tab strip which includes the new tab button.
+-class VerticalTabStripBottomContainer : public views::FlexLayoutView {
++class VerticalTabStripBottomContainer : public views::FlexLayoutView,
++                                        public views::ViewObserver {
+   METADATA_HEADER(VerticalTabStripBottomContainer, views::FlexLayoutView)
+  public:
+   VerticalTabStripBottomContainer(
+@@ -37,15 +45,29 @@ class VerticalTabStripBottomContainer : public views::FlexLayoutView {
+   bool IsPositionInWindowCaption(const gfx::Point& point);
+ 
+   void OnCollapseStateChanged(tabs::VerticalTabStripCollapseState state);
++  void SetRailHovered(bool hovered);
+ 
+  private:
+   void OnNewTabButtonContextMenuWillShow();
+   void OnNewTabButtonContextMenuClosed();
+ 
+   void UpdateButtonStyles(bool collapsed);
++  void TogglePageColor();
++  void UpdateColorButton();
++  void UpdateColorButtonVisibility();
++
++  // views::ViewObserver:
++  void OnViewFocused(views::View* observed_view) override;
++  void OnViewBlurred(views::View* observed_view) override;
+ 
+   raw_ptr<BrowserWindowInterface> browser_ = nullptr;
+   raw_ptr<VerticalNewTabButton> new_tab_button_ = nullptr;
++  raw_ptr<views::View> color_button_spacer_ = nullptr;
++  raw_ptr<views::ToggleImageButton> color_button_ = nullptr;
++  bool rail_hovered_ = false;
++  PrefChangeRegistrar grayscale_pref_registrar_;
++  base::ScopedObservation<views::View, views::ViewObserver>
++      color_button_observation_{this};
+   base::CallbackListSubscription collapsed_state_change_subscription_;
+   base::CallbackListSubscription new_tab_button_pressed_subscription_;
+ 
+diff --git a/chrome/common/pref_names.h b/chrome/common/pref_names.h
+index 35f616e..a984f14 100644
+--- a/chrome/common/pref_names.h
++++ b/chrome/common/pref_names.h
+@@ -645,6 +645,10 @@ inline constexpr char kHeliumZenModeSidebarPinned[] =
+ inline constexpr char kHeliumZenModeTopChromePinned[] =
+     "helium.browser.zen_mode_top_chrome_pinned";
+ 
++// Whether browser tab contents are displayed in grayscale.
++inline constexpr char kStillGrayscaleEnabled[] =
++    "still.browser.grayscale_enabled";
++
+ // A boolean pref set to true if the address bar should be centered.
+ // When false, the address bar uses the full available width.
+ inline constexpr char kHeliumCenteredLocationBar[] =
+diff --git a/ui/color/sys_color_mixer.cc b/ui/color/sys_color_mixer.cc
+index 360fa48..ab37ec5 100644
+--- a/ui/color/sys_color_mixer.cc
++++ b/ui/color/sys_color_mixer.cc
+@@ -111,6 +111,18 @@ void AddGrayscaleSysColorOverrides(ColorMixer& mixer,
+   // Experimentation.
+   mixer[kColorSysOmniboxContainer] = {dark_mode ? kColorRefNeutral15
+                                                 : kColorRefNeutral92};
++
++  if (dark_mode) {
++    mixer[kColorSysHeader] = {SkColorSetRGB(0x11, 0x11, 0x11)};
++    mixer[kColorSysHeaderInactive] = {SkColorSetRGB(0x11, 0x11, 0x11)};
++    mixer[kColorSysSurface] = {SkColorSetRGB(0x14, 0x14, 0x14)};
++    mixer[kColorSysBase] = {SkColorSetRGB(0x20, 0x20, 0x20)};
++    mixer[kColorSysBaseContainer] = {SkColorSetRGB(0x1A, 0x1A, 0x1A)};
++    mixer[kColorSysBaseContainerElevated] = {SkColorSetRGB(0x24, 0x24, 0x24)};
++    mixer[kColorSysHeaderContainer] = {SkColorSetRGB(0x20, 0x20, 0x20)};
++    mixer[kColorSysHeaderContainerInactive] = {SkColorSetRGB(0x20, 0x20, 0x20)};
++    mixer[kColorSysOmniboxContainer] = {SkColorSetRGB(0x20, 0x20, 0x20)};
++  }
+ }
+ 
+ }  // namespace

@@ -1,0 +1,346 @@
+Still: separate Windows product, profile, COM registrations, and packages.
+
+Apply after Helium Windows preparation. Preserve security service methods,
+caller validation, sandbox configuration, updater signatures, and package checks.
+Use UUIDv5(uuid5(NAMESPACE_DNS, "com.jacobcamino.still.windows"), identity_name)
+for the distinct service/install identities. The new product has no legacy
+Chromium/Helium COM registrations to migrate. Signed Still updates require a
+Still release appcast and the existing WinSparkle signing configuration.
+Keep internal helium.7z/Helium-bin names for installer compatibility.
+
+diff --git a/chrome/app/theme/chromium/BRANDING b/chrome/app/theme/chromium/BRANDING
+index a486e9b..e1c3ef1 100644
+--- a/chrome/app/theme/chromium/BRANDING
++++ b/chrome/app/theme/chromium/BRANDING
+@@ -1,9 +1,9 @@
+ COMPANY_FULLNAME=The Helium Authors
+ COMPANY_SHORTNAME=The Helium Authors
+-PRODUCT_FULLNAME=Helium
+-PRODUCT_SHORTNAME=Helium
+-PRODUCT_INSTALLER_FULLNAME=Helium Installer
+-PRODUCT_INSTALLER_SHORTNAME=Helium Installer
++PRODUCT_FULLNAME=Still
++PRODUCT_SHORTNAME=Still
++PRODUCT_INSTALLER_FULLNAME=Still Installer
++PRODUCT_INSTALLER_SHORTNAME=Still Installer
+ COPYRIGHT=Copyright @LASTCHANGE_YEAR@ The Helium Authors. All rights reserved.
+ MAC_BUNDLE_ID=net.imput.helium
+ MAC_CREATOR_CODE=Cr24
+diff --git a/chrome/browser/win/winsparkle_glue.cc b/chrome/browser/win/winsparkle_glue.cc
+index fc393eb..a4d2c7b 100644
+--- a/chrome/browser/win/winsparkle_glue.cc
++++ b/chrome/browser/win/winsparkle_glue.cc
+@@ -392,7 +392,7 @@ class WinSparkleController : public ProfileObserver,
+ 
+       const std::wstring version =
+           base::UTF8ToWide(std::string(version_info::GetHeliumVersionNumber()));
+-      win_sparkle_set_app_details(L"Helium", L"Helium", version.c_str());
++      win_sparkle_set_app_details(L"JacobCamino", L"Still", version.c_str());
+       win_sparkle_set_eddsa_public_key(BUILDFLAG(WINSPARKLE_ED_KEY));
+       RegisterWinSparkleCallbacks();
+       win_sparkle_set_update_check_interval(
+diff --git a/chrome/elevation_service/elevation_service_idl.idl b/chrome/elevation_service/elevation_service_idl.idl
+index 255ba39..c937b51 100644
+--- a/chrome/elevation_service/elevation_service_idl.idl
++++ b/chrome/elevation_service/elevation_service_idl.idl
+@@ -135,7 +135,7 @@ interface IElevator2 : IElevator
+ [
+   object,
+   oleautomation,
+-  uuid(B88C45B9-8825-4629-B83E-77CC67D9CEED),
++  uuid(D7C61AAC-ACB7-56B9-8F43-E892E4593443),
+   helpstring("IElevatorChromium Interface"),
+   pointer_default(unique)
+ ]
+@@ -195,7 +195,7 @@ interface IElevatorChromeCanary : IElevator
+ [
+   object,
+   oleautomation,
+-  uuid(BB19A0E5-00C6-4966-94B2-5AFEC6FED93A),
++  uuid(31FF1611-6833-533E-B1ED-E88F4E5C321F),
+   helpstring("IElevator2Chromium Interface"),
+   pointer_default(unique)
+ ]
+@@ -248,7 +248,7 @@ interface IElevator2ChromeCanary : IElevator2
+ };
+ 
+ [
+-  uuid(0014D784-7012-4A79-8AB6-ADDB8193A06E),
++  uuid(0B90256C-C6A0-5DFE-A77F-C42162467899),
+   version(1.0),
+   helpstring("Elevator 1.0 Type Library")
+ ]
+diff --git a/chrome/install_static/chromium_install_modes.h b/chrome/install_static/chromium_install_modes.h
+index 4a413db..21bf803 100644
+--- a/chrome/install_static/chromium_install_modes.h
++++ b/chrome/install_static/chromium_install_modes.h
+@@ -17,11 +17,11 @@ namespace install_static {
+ 
+ // The brand-specific company name to be included as a component of the install
+ // and user data directory paths. May be empty if no such dir is to be used.
+-inline constexpr wchar_t kCompanyPathName[] = L"imput";
++inline constexpr wchar_t kCompanyPathName[] = L"JacobCamino";
+ 
+ // The brand-specific product name to be included as a component of the install
+ // and user data directory paths.
+-inline constexpr wchar_t kProductPathName[] = L"Helium";
++inline constexpr wchar_t kProductPathName[] = L"Still";
+ 
+ // The brand-specific safe browsing client name.
+ inline constexpr char kSafeBrowsingName[] = "helium";
+@@ -33,15 +33,6 @@ enum InstallConstantIndex {
+   NUM_INSTALL_MODES,
+ };
+ 
+-inline constexpr auto kOldTracingServiceIids = std::to_array<IID>({
+-    // Replaced in 2026-09. Delete after 2028-09.
+-    // {A3FD580A-FFD4-4075-9174-75D0B199D3CB}
+-    {0xa3fd580a,
+-     0xffd4,
+-     0x4075,
+-     {0x91, 0x74, 0x75, 0xd0, 0xb1, 0x99, 0xd3, 0xcb}},
+-});
+-
+ inline constexpr auto kInstallModes = std::to_array<InstallConstants>({
+     // The primary (and only) install mode for Chromium.
+     {
+@@ -53,48 +44,48 @@ inline constexpr auto kInstallModes = std::to_array<InstallConstants>({
+             L"",  // Empty install_suffix for the primary install mode.
+         .logo_suffix = L"",  // No logo suffix for the primary install mode.
+         .app_guid =
+-            L"{FB68A146-637A-48C2-A0C4-1565DE45FEBD}",
+-        .base_app_name = L"Helium",              // A distinct base_app_name.
+-        .base_app_id = L"Helium",                // A distinct base_app_id.
+-        .browser_prog_id_prefix = L"HeliumHTM",  // Browser ProgID prefix.
++            L"{5ACE1F37-870C-54DA-8C34-2E1D10263F9D}",
++        .base_app_name = L"Still",              // A distinct base_app_name.
++        .base_app_id = L"Still",                // A distinct base_app_id.
++        .browser_prog_id_prefix = L"StillHTM",  // Browser ProgID prefix.
+         .browser_prog_id_description =
+-            L"Helium HTML Document",  // Browser ProgID description.
+-        .direct_launch_url_scheme = "helium",
+-        .pdf_prog_id_prefix = L"HeliumPDF",  // PDF ProgID prefix.
++            L"Still HTML Document",  // Browser ProgID description.
++        .direct_launch_url_scheme = "still",
++        .pdf_prog_id_prefix = L"StillPDF",  // PDF ProgID prefix.
+         .pdf_prog_id_description =
+-            L"Helium PDF Document",  // PDF ProgID description.
++            L"Still PDF Document",  // PDF ProgID description.
+         .active_setup_guid =
+-            L"{FB68A146-637A-48C2-A0C4-1565DE45FEBD}",  // Active Setup
++            L"{479AF11F-2B8E-50D0-AA14-36F2AE78032D}",  // Active Setup
+                                                         // GUID.
+-        .toast_activator_clsid = {0xE9852F6C,
+-                                  0x08D6,
+-                                  0x4EC9,
+-                                  {0xBD, 0x14, 0x8A, 0x0F, 0xDE, 0x97, 0x51,
+-                                   0x59}},  // Toast Activator CLSID.
+-        .elevator_clsid = {0x140DE20F,
+-                           0x6DB4,
+-                           0x4D6B,
+-                           {0x8B, 0xFE, 0x83, 0xBF, 0x8C, 0xA1, 0xB1,
+-                            0xB0}},  // Elevator CLSID.
+-        .elevator_iid = {0xC89A04FF,
+-                         0xc6,
+-                         0x4966,
+-                         {0x94, 0xb2, 0x5a, 0xfe, 0xc6, 0xfe, 0xd9,
+-                          0x3a}},  // IElevator IID and TypeLib
+-        // {C89A04FF-00C6-4966-94B2-5AFEC6FED93A}.
++        .toast_activator_clsid = {0x968660E6,
++                                  0x40A2,
++                                  0x58E2,
++                                  {0x8E, 0x6D, 0x78, 0xD6, 0xCB, 0xBC, 0x0E,
++                                   0xAF}},  // Toast Activator CLSID.
++        .elevator_clsid = {0xCDA3B8EB,
++                           0x992F,
++                           0x56BD,
++                           {0x99, 0xB4, 0xE5, 0xA2, 0xC4, 0x0F, 0xE4,
++                            0xA1}},  // Elevator CLSID.
++        .elevator_iid = {0x31FF1611,
++                         0x6833,
++                         0x533E,
++                         {0xB1, 0xED, 0xE8, 0x8F, 0x4E, 0x5C, 0x32,
++                          0x1F}},  // IElevator IID and TypeLib
++        // {31FF1611-6833-533E-B1ED-E88F4E5C321F}.
+         .old_elevator_iids = {},
+-        .tracing_service_clsid = {0x83f69367,
+-                                  0x442d,
+-                                  0x447f,
+-                                  {0x8b, 0xcc, 0x0e, 0x3f, 0x97, 0xbe, 0x9c,
+-                                   0xf2}},  // SystemTraceSession CLSID.
+-        .tracing_service_iid = {0xe0b03e2d,
+-                                0x7682,
+-                                0x4d83,
+-                                {0xb9, 0xff, 0x45, 0x74, 0xaf, 0x72, 0x05,
+-                                 0x00}},  // ISystemTraceSessionChromium IID and
++        .tracing_service_clsid = {0xE580F5E2,
++                                  0x321B,
++                                  0x59E2,
++                                  {0xB8, 0xD8, 0xC2, 0xE7, 0x15, 0xD9, 0xC8,
++                                   0x5F}},  // SystemTraceSession CLSID.
++        .tracing_service_iid = {0x5270629E,
++                                0x330E,
++                                0x5079,
++                                {0xA4, 0xBA, 0x3B, 0x78, 0x58, 0xA9, 0xAD,
++                                 0xF5}},  // ISystemTraceSessionChromium IID and
+                                           // TypeLib
+-        .old_tracing_service_iids = kOldTracingServiceIids,
++        .old_tracing_service_iids = {},  // No previous Still registrations.
+         .default_channel_name =
+             L"",  // Empty default channel name since no update integration.
+         .channel_strategy = ChannelStrategy::UNSUPPORTED,
+diff --git a/chrome/installer/mini_installer/BUILD.gn b/chrome/installer/mini_installer/BUILD.gn
+index 2e06119..acf9cff 100644
+--- a/chrome/installer/mini_installer/BUILD.gn
++++ b/chrome/installer/mini_installer/BUILD.gn
+@@ -193,6 +193,7 @@ action("mini_installer_archive") {
+     ":setup_runtime_deps",
+     "//chrome",
+     "//chrome:chrome_dll",
++    "//chrome:still_blocking_bundle",
+     "//chrome/browser/extensions/default_extensions",
+     "//chrome/chrome_elf",
+     "//chrome/elevation_service",
+diff --git a/chrome/installer/mini_installer/chrome.release b/chrome/installer/mini_installer/chrome.release
+index 07987d2..4b22c5f 100644
+--- a/chrome/installer/mini_installer/chrome.release
++++ b/chrome/installer/mini_installer/chrome.release
+@@ -44,6 +44,7 @@ WinSparkle.dll: %(VersionDir)s\
+ #
+ Extensions\*.*: %(VersionDir)s\Extensions\
+ locales\*.pak: %(VersionDir)s\Locales
++resources\still-blocking.crx: %(VersionDir)s\resources\
+ 
+ #
+ # VisualElements sub-dir.
+diff --git a/chrome/installer/setup/installer_crash_reporter_client.cc b/chrome/installer/setup/installer_crash_reporter_client.cc
+index ecdf529..603ad20 100644
+--- a/chrome/installer/setup/installer_crash_reporter_client.cc
++++ b/chrome/installer/setup/installer_crash_reporter_client.cc
+@@ -103,7 +103,7 @@ bool InstallerCrashReporterClient::ReportingIsEnforcedByPolicy(bool* enabled) {
+       L"SOFTWARE\\Policies\\Google\\Chrome";
+ #else
+   static const wchar_t kRegistryChromePolicyKey[] =
+-      L"SOFTWARE\\Policies\\Helium";
++      L"SOFTWARE\\Policies\\Still";
+ #endif
+   static const wchar_t kMetricsReportingEnabled[] = L"MetricsReportingEnabled";
+ 
+diff --git a/chrome/installer/util/logging_installer.cc b/chrome/installer/util/logging_installer.cc
+index 8c57ca0..1439537 100644
+--- a/chrome/installer/util/logging_installer.cc
++++ b/chrome/installer/util/logging_installer.cc
+@@ -126,7 +126,7 @@ base::FilePath GetLogFilePath(const installer::InitialPreferences& prefs) {
+ #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+       FILE_PATH_LITERAL("chrome_installer.log");
+ #else  // BUILDFLAG(CHROMIUM_BRANDING)
+-      FILE_PATH_LITERAL("helium_installer.log");
++      FILE_PATH_LITERAL("still_installer.log");
+ #endif
+ 
+   // Fallback to current directory if getting the secure or temp directory
+diff --git a/chrome/tools/build/win/FILES.cfg b/chrome/tools/build/win/FILES.cfg
+index c1f1084..e3c70ec 100644
+--- a/chrome/tools/build/win/FILES.cfg
++++ b/chrome/tools/build/win/FILES.cfg
+@@ -35,6 +35,11 @@
+ #           considered an error.
+ 
+ FILES = [
++  {
++    'filename': 'resources/still-blocking.crx',
++    'buildtype': ['official'],
++    'filegroup': ['default'],
++  },
+   {
+     'filename': 'browser_tests.exe',
+     'buildtype': ['official'],
+diff --git a/chrome/windows_services/elevated_tracing_service/tracing_service_idl.idl b/chrome/windows_services/elevated_tracing_service/tracing_service_idl.idl
+index ac55d83..585ab2d 100644
+--- a/chrome/windows_services/elevated_tracing_service/tracing_service_idl.idl
++++ b/chrome/windows_services/elevated_tracing_service/tracing_service_idl.idl
+@@ -54,7 +54,7 @@ cpp_quote ("};")
+ [
+   object,
+   oleautomation,
+-  uuid(E0B03E2D-7682-4D83-B9FF-4574AF720500),
++  uuid(5270629E-330E-5079-A4BA-3B7858A9ADF5),
+   helpstring("ISystemTraceSessionChromium Interface"),
+   pointer_default(unique)
+ ]
+@@ -107,7 +107,7 @@ interface ISystemTraceSessionChromeCanary : ISystemTraceSession
+ };
+ 
+ [
+-  uuid(C9368104-11AE-4784-8C2D-115C5D421937),
++  uuid(097B35DF-6347-5DEC-AB74-F0614781F2A8),
+   version(1.0),
+   helpstring("SystemTraceSession 1.0 Type Library")
+ ]
+diff --git a/components/helium_services/helium_services_helpers.cc b/components/helium_services/helium_services_helpers.cc
+index e9981de..d63ef2c 100644
+--- a/components/helium_services/helium_services_helpers.cc
++++ b/components/helium_services/helium_services_helpers.cc
+@@ -28,12 +28,17 @@ namespace helium {
+ #endif
+ 
+ #if defined(UPDATES_SUPPORTED)
++#if BUILDFLAG(IS_WIN)
++constexpr std::string_view kUpdateBaseUrl =
++    "https://github.com/jacob-camino/still-windows/releases/latest/download/";
++#else
+ constexpr std::string_view kUpdateBaseUrl = "https://updates.helium.computer/";
++#endif
+ constexpr const char kUpdatePath[] =
+ #if BUILDFLAG(IS_MAC)
+     "mac/appcast-" CPU_ARCH_STR ".xml";
+ #elif BUILDFLAG(IS_WIN)
+-    "win/appcast.xml";
++    "appcast.xml";
+ #endif
+ 
+ // Duplicated from helium_flag_choices.h to avoid importing it.
+diff --git a/components/policy/tools/generate_policy_source.py b/components/policy/tools/generate_policy_source.py
+index 871efd3..5f9a417 100644
+--- a/components/policy/tools/generate_policy_source.py
++++ b/components/policy/tools/generate_policy_source.py
+@@ -28,7 +28,7 @@ from xml.sax.saxutils import escape as xml_escape
+ 
+ CHROME_POLICY_KEY = 'SOFTWARE\\\\Policies\\\\Google\\\\Chrome'
+ CHROME_FOR_TESTING_POLICY_KEY = CHROME_POLICY_KEY + ' for Testing'
+-CHROMIUM_POLICY_KEY = 'SOFTWARE\\\\Policies\\\\Helium'
++CHROMIUM_POLICY_KEY = 'SOFTWARE\\\\Policies\\\\Still'
+ PLATFORM_STRINGS = {
+     'chrome_frame': ['win'],
+     'chrome_os': ['chrome_os'],
+diff --git a/components/policy/tools/template_writers/writer_configuration.py b/components/policy/tools/template_writers/writer_configuration.py
+index a37d3de..cd7211c 100644
+--- a/components/policy/tools/template_writers/writer_configuration.py
++++ b/components/policy/tools/template_writers/writer_configuration.py
+@@ -27,21 +27,21 @@ def GetConfigurationForBuild(defines):
+   if '_chromium' in defines:
+     config = {
+         'build': 'chromium',
+-        'app_name': 'Helium',
++        'app_name': 'Still',
+         'doc_url': 'https://chromeenterprise.google/policies/',
+         'frame_name': 'Chromium Frame',
+         'os_name': 'ChromiumOS',
+         'webview_name': 'Chromium WebView',
+         'win_config': {
+             'win': {
+-                'reg_mandatory_key_name': 'Software\\Policies\\Helium',
++                'reg_mandatory_key_name': 'Software\\Policies\\Still',
+                 'reg_recommended_key_name':
+-                'Software\\Policies\\Helium\\Recommended',
++                'Software\\Policies\\Still\\Recommended',
+                 'mandatory_category_path': ['chromium'],
+                 'recommended_category_path': ['chromium_recommended'],
+                 'category_path_strings': {
+-                    'chromium': 'Helium',
+-                    'chromium_recommended': 'Helium - {doc_recommended}',
++                    'chromium': 'Still',
++                    'chromium_recommended': 'Still - {doc_recommended}',
+                 },
+                 'namespace': 'Chromium.Policies.Chromium',
+             },

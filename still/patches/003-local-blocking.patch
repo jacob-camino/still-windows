@@ -1,0 +1,128 @@
+Still: bundle local blocked-site controls as an ordinary signed MV3 extension.
+
+Use Chromium's existing CRX installer and first-profile preinstall decision.
+Existing installs receive bundled-version updates; user removal is respected.
+The extension has only DNR + storage permissions, a normal toolbar action and
+options page. No component privileges, uBlock edits, verifier changes, or
+security flag changes. Copy validated package assets before applying this patch
+with still/blocking/copy-into-source.py.
+
+diff --git a/chrome/browser/extensions/external_provider_impl.cc b/chrome/browser/extensions/external_provider_impl.cc
+--- a/chrome/browser/extensions/external_provider_impl.cc
++++ b/chrome/browser/extensions/external_provider_impl.cc
+@@ -21,6 +21,7 @@
+ #include "base/logging.h"
+ #include "base/memory/scoped_refptr.h"
+ #include "base/metrics/field_trial.h"
++#include "base/path_service.h"
+ #include "base/strings/string_util.h"
+ #include "base/trace_event/trace_event.h"
+ #include "base/values.h"
+@@ -39,6 +40,7 @@
+ #include "chrome/browser/extensions/external_pref_loader.h"
+ #include "chrome/browser/extensions/forced_extensions/install_stage_tracker_factory.h"
+ #include "chrome/browser/extensions/initial_external_extension_loader.h"
++#include "chrome/browser/extensions/still_blocking/identity.h"
+ #include "chrome/browser/policy/profile_policy_connector.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/profiles/profiles_state.h"
+@@ -101,6 +103,30 @@
+ using ::base::i18n::LanguageTag;
+ using ::base::i18n::LanguageTagConverter;
+ 
++#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
++// A normal, removable extension supplied by the signed browser distribution.
++// The standard CRX installer verifies its signature, ID, version and permissions.
++class StillBlockingLoader : public ExternalLoader {
++ public:
++  void StartLoading() override {
++    base::DictValue prefs;
++    base::FilePath resources;
++    if (base::PathService::Get(chrome::DIR_RESOURCES, &resources)) {
++      base::DictValue extension;
++      extension.Set(ExternalProviderImpl::kExternalCrx,
++                    resources.AppendASCII("still-blocking.crx").AsUTF8Unsafe());
++      extension.Set(ExternalProviderImpl::kExternalVersion,
++                    still_blocking::kVersion);
++      prefs.Set(still_blocking::kExtensionId, std::move(extension));
++    }
++    LoadFinished(std::move(prefs));
++  }
++
++ private:
++  ~StillBlockingLoader() override = default;
++};
++#endif
++
+ #if BUILDFLAG(IS_CHROMEOS)
+ 
+ const char kCameraAppId[] = "hfhhnacclhffhdffklopdkcgdhifgngh";
+@@ -908,6 +934,22 @@
+       Extension::FROM_WEBSTORE | Extension::WAS_INSTALLED_BY_DEFAULT));
+ #endif
+ 
++#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
++  // Follow the existing first-profile preinstall decision. On later launches,
++  // only update an existing installation; never undo a user's removal.
++  if (preinstalled_extensions::Provider::DidPerformNewInstallationForProfile(
++          profile) ||
++      ExtensionRegistry::Get(profile)->GetExtensionById(
++          still_blocking::kExtensionId, ExtensionRegistry::EVERYTHING)) {
++    auto still_provider = std::make_unique<ExternalProviderImpl>(
++        service, base::MakeRefCounted<StillBlockingLoader>(), profile,
++        ManifestLocation::kInternal, ManifestLocation::kInvalidLocation,
++        Extension::WAS_INSTALLED_BY_DEFAULT);
++    still_provider->set_auto_acknowledge(true);
++    provider_list->push_back(std::move(still_provider));
++  }
++#endif
++
+   std::unique_ptr<ExternalProviderImpl> drive_migration_provider(
+       new ExternalProviderImpl(
+           service,
+diff --git a/chrome/browser/extensions/BUILD.gn b/chrome/browser/extensions/BUILD.gn
+--- a/chrome/browser/extensions/BUILD.gn
++++ b/chrome/browser/extensions/BUILD.gn
+@@ -729,6 +729,7 @@
+       "chrome_kiosk_delegate_non_chromeos.cc",
+       "preinstalled_extensions.cc",
+       "preinstalled_extensions.h",
++      "still_blocking/identity.h",
+     ]
+     if (!is_android) {
+       deps += [ "//chrome/browser/download/bubble" ]
+diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
+--- a/chrome/BUILD.gn
++++ b/chrome/BUILD.gn
+@@ -131,6 +131,13 @@
+   assert_no_deps = [ "//chrome/installer/util:strings" ]
+ }
+ 
++if (is_win || is_linux) {
++  copy("still_blocking_bundle") {
++    sources = [ "browser/extensions/still_blocking/still-blocking.crx" ]
++    outputs = [ "$root_out_dir/resources/{{source_file_part}}" ]
++  }
++}
++
+ if (!is_android && !is_mac) {
+   group("chrome") {
+     public_deps = [ ":chrome_initial" ]
+@@ -173,6 +180,9 @@
+     ]
+     data = [ "$root_out_dir/resources.pak" ]
+     data_deps = []
++    if (is_win || is_linux) {
++      data_deps += [ ":still_blocking_bundle" ]
++    }
+ 
+     if (is_win || is_linux || is_chromeos) {
+       deps += [ "//components/webapps/isolated_web_apps:scheme" ]
+@@ -1092,6 +1102,7 @@
+       # can't deal with .icns files.
+       "$root_gen_dir/chrome/browser/mac/install.sh",
+       "app/theme/default_100_percent/$branding_path_component/product_logo_32.png",
++      "browser/extensions/still_blocking/still-blocking.crx",
+     ]
+ 
+     outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]

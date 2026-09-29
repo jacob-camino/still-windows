@@ -1,0 +1,20 @@
+{
+  "name": "Sinfonietta pornography-hosts",
+  "commit": "46f3097d7bcfc9eea323fe365074dfd771d0d17c",
+  "source": "https://github.com/Sinfonietta/hostfiles",
+  "license": "MIT",
+  "domains": 61154,
+  "rules": 123,
+  "rejected": [
+    "85.17.187.83",
+    "51.89.232.63",
+    "93.115.61.56",
+    "pornspare_com.imedia-stream.com",
+    "136.243.75.38",
+    "185.63.253.200",
+    "en"
+  ],
+  "sha256": "d5c31a7ee9f1920df47044270449ad42a1b09ad4f3b608410383abaabb27fa1d",
+  "publicSuffixCommit": "a179a48c465e818cfd8d626691cb317985da87fb",
+  "publicSuffixSha256": "7333192f818588d9d0044d27d67210c782acd6d87cf71f54a00dfa20a561cfc9"
+}

@@ -358,6 +358,12 @@ def main():
 
         _configure_remoteexec(source_tree)
 
+    # Apply Still only after Helium's patches, substitutions, and resources.
+    # This is idempotent so resumed builds also validate the signed bundle.
+    subprocess.run(
+        [sys.executable, str(_ROOT_DIR / 'still' / 'apply.py'),
+         '--source', str(source_tree)], check=True)
+
     clang_format = shutil.which('clang-format')
     if not clang_format:
         parser.error('clang-format not found on PATH; run python -m pip install clang-format')

@@ -1,0 +1,5 @@
+extension/_metadata/
+.integration-work/
+__pycache__/
+*.pem
+*.key
