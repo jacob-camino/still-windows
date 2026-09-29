@@ -12,28 +12,119 @@ jobs:
     runs-on: windows-2025-vs2026
     timeout-minutes: 10
     steps:
-      - name: Report build feasibility and installed compiler
+      - name: Read-only disk inventory for a possible build cleanup
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           $volume = Get-Volume -DriveLetter C
-          $memory = (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
-          $cpu = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
-          $free = [math]::Round($volume.SizeRemaining / 1GB, 1)
-          $total = [math]::Round($volume.Size / 1GB, 1)
-          $ram = [math]::Round($memory / 1GB, 1)
-          $enough = $volume.SizeRemaining -ge (100GB)
+          $computer = Get-CimInstance Win32_ComputerSystem
+          Write-Output ('CAPACITY ' + (@{
+            freeGiB = [math]::Round($volume.SizeRemaining / 1GB, 2)
+            totalGiB = [math]::Round($volume.Size / 1GB, 2)
+            ramGiB = [math]::Round($computer.TotalPhysicalMemory / 1GB, 2)
+            logicalProcessors = $computer.NumberOfLogicalProcessors
+          } | ConvertTo-Json -Compress))
+          Get-Volume | Where-Object DriveLetter | Select-Object DriveLetter, Size, SizeRemaining | ConvertTo-Json -Compress
+          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -products '*' -property installationPath
+          Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\Include" -Directory | Select-Object -ExpandProperty Name
+
+          # No contents are read, and no installed files, caches, or tools are changed.
+          # Compressed allocation is an upper estimate: hard links are not deduplicated.
+          # Reparse points are skipped. All selected paths are disjoint.
+          Add-Type -TypeDefinition @'
+          using System;
+          using System.IO;
+          using System.Collections.Generic;
+          using System.Diagnostics;
+          using System.Runtime.InteropServices;
+          public sealed class DiskMeasure {
+            [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+            static extern uint GetCompressedFileSizeW(string file, out uint high);
+            public long LogicalBytes, AllocatedBytes, Files, Skipped, Errors;
+            public bool TimedOut;
+            public static DiskMeasure Scan(string path) {
+              var result = new DiskMeasure();
+              var queue = new Stack<DirectoryInfo>();
+              queue.Push(new DirectoryInfo(path));
+              var watch = Stopwatch.StartNew();
+              while (queue.Count > 0) {
+                if (watch.Elapsed.TotalSeconds > 45) { result.TimedOut = true; break; }
+                var dir = queue.Pop();
+                try {
+                  foreach (var entry in dir.EnumerateFileSystemInfos()) {
+                    try {
+                      if ((entry.Attributes & FileAttributes.ReparsePoint) != 0) { result.Skipped++; continue; }
+                      if ((entry.Attributes & FileAttributes.Directory) != 0) { queue.Push((DirectoryInfo)entry); continue; }
+                      result.LogicalBytes += ((FileInfo)entry).Length;
+                      result.Files++;
+                      uint high;
+                      uint low = GetCompressedFileSizeW(entry.FullName, out high);
+                      if (low == UInt32.MaxValue && Marshal.GetLastWin32Error() != 0) { result.Errors++; }
+                      else { result.AllocatedBytes += (long)(((ulong)high << 32) | low); }
+                    } catch (IOException) { result.Errors++; }
+                    catch (UnauthorizedAccessException) { result.Errors++; }
+                  }
+                } catch (IOException) { result.Errors++; }
+                catch (UnauthorizedAccessException) { result.Errors++; }
+              }
+              return result;
+            }
+          }
+          '@
+          $paths = [System.Collections.Generic.List[object]]::new()
+          function Add-Path([string]$Path, [string]$Disposition) {
+            if (Test-Path -LiteralPath $Path -PathType Container) {
+              $paths.Add([pscustomobject]@{Path = $Path.TrimEnd('\'); Disposition = $Disposition})
+            }
+          }
+          foreach ($base in @('C:\Program Files', 'C:\Program Files (x86)')) {
+            foreach ($dir in Get-ChildItem -LiteralPath $base -Directory) {
+              $keep = $dir.Name -match '^(Microsoft Visual Studio|Windows Kits|Microsoft SDKs|Reference Assemblies|MSBuild|dotnet|PowerShell|Git|7-Zip|CMake|nodejs|Python|Common Files|Windows)'
+              Add-Path $dir.FullName $(if ($keep) {'preserve'} else {'review-tool'})
+            }
+          }
+          foreach ($dir in Get-ChildItem -LiteralPath 'C:\hostedtoolcache\windows' -Directory -ErrorAction SilentlyContinue) {
+            Add-Path $dir.FullName $(if ($dir.Name -match '^(Python|node)$') {'preserve-toolcache'} else {'review-toolcache'})
+          }
+          foreach ($path in @('C:\Android', 'C:\SeleniumWebDrivers', 'C:\selenium', 'C:\msys64', 'C:\Strawberry', 'C:\ghcup', 'C:\ProgramData\Package Cache', 'C:\ProgramData\Docker', 'C:\ProgramData\DockerDesktop', 'C:\tools', 'C:\ProgramData\chocolatey\lib', 'C:\ProgramData\Microsoft\VisualStudio\Packages', 'C:\Users\runneradmin\.nuget', 'C:\Users\runneradmin\.cargo', 'C:\Users\runneradmin\.rustup', 'C:\Users\runneradmin\.gradle', 'C:\Users\runneradmin\AppData\Local\Android', 'C:\Users\runneradmin\AppData\Local\pip\Cache')) {
+            Add-Path $path 'review-cache-or-tool'
+          }
+          Add-Path 'C:\Windows' 'preserve-os'
+          Add-Path 'C:\actions' 'preserve-runner'
+          $selected = @($paths | Sort-Object Path -Unique)
+          foreach ($entry in $selected) {
+            foreach ($other in $selected) {
+              if ($entry.Path -ne $other.Path -and $entry.Path.StartsWith($other.Path + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "Overlapping inventory roots: $($entry.Path) and $($other.Path)"
+              }
+            }
+          }
+          $results = [System.Collections.Generic.List[object]]::new()
+          $auditTimer = [System.Diagnostics.Stopwatch]::StartNew()
+          foreach ($entry in $selected) {
+            if ($auditTimer.Elapsed.TotalSeconds -gt 420) { Write-Output 'INVENTORY_TIME_LIMIT'; break }
+            $size = [DiskMeasure]::Scan($entry.Path)
+            $row = [pscustomobject]@{
+              path = $entry.Path; disposition = $entry.Disposition
+              logicalGiB = [math]::Round($size.LogicalBytes / 1GB, 3)
+              allocatedGiBUpper = [math]::Round($size.AllocatedBytes / 1GB, 3)
+              files = $size.Files; skippedReparsePoints = $size.Skipped
+              errors = $size.Errors; incomplete = $size.TimedOut
+            }
+            $results.Add($row)
+            Write-Output ('DIRECTORY ' + ($row | ConvertTo-Json -Compress))
+          }
+          $candidate = ($results | Where-Object disposition -like 'review-*' | Measure-Object allocatedGiBUpper -Sum).Sum
           $summary = @"
-          # Still Windows runner capacity
+          # Still Windows read-only capacity inventory
 
-          - Free disk: $free GiB
-          - Total disk: $total GiB
-          - RAM: $ram GiB
-          - Logical processors: $cpu
-          - Meets 100 GiB source/build floor: $enough
-
-          The inherited checkpoint process also needs the full build tree and its compressed archive concurrently. No Chromium checkout, compile, cache, artifact, or release was created.
+          - Existing free space: $([math]::Round($volume.SizeRemaining / 1GB, 2)) GiB
+          - Reviewed candidate allocation upper estimate: $candidate GiB
+          - Existing free plus candidate upper estimate: $([math]::Round($volume.SizeRemaining / 1GB + $candidate, 2)) GiB
+          - Existing VS2026, Windows SDKs, Python, Node, Git, PowerShell and runner files are marked preserve.
+          - The build separately installs Windows SDK10.0.28000.0 if missing.
+          - Directory estimates skip reparse points and do not deduplicate hard links; this is a cleanup-planning inventory, not a claim of actual reclaimed space.
+          - No cleanup, Chromium download, compile, artifact, release, paid runner or SDK upload occurred.
           "@
           Write-Output $summary
           $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -products '*' -format json
-          Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\Include" -Directory | Select-Object Name
