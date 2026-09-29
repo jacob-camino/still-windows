@@ -1,0 +1,39 @@
+name: Still Windows build capacity
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capacity:
+    if: github.repository == 'jacob-camino/still-windows'
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 10
+    steps:
+      - name: Report build feasibility and installed compiler
+        shell: pwsh
+        run: |
+          $volume = Get-Volume -DriveLetter C
+          $memory = (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
+          $cpu = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
+          $free = [math]::Round($volume.SizeRemaining / 1GB, 1)
+          $total = [math]::Round($volume.Size / 1GB, 1)
+          $ram = [math]::Round($memory / 1GB, 1)
+          $enough = $volume.SizeRemaining -ge (100GB)
+          $summary = @"
+          # Still Windows runner capacity
+
+          - Free disk: $free GiB
+          - Total disk: $total GiB
+          - RAM: $ram GiB
+          - Logical processors: $cpu
+          - Meets 100 GiB source/build floor: $enough
+
+          The inherited checkpoint process also needs the full build tree and its compressed archive concurrently. No Chromium checkout, compile, cache, artifact, or release was created.
+          "@
+          Write-Output $summary
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -products '*' -format json
+          Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\Include" -Directory | Select-Object Name
